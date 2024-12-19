@@ -378,7 +378,7 @@ func resourceAccessContextManagerServicePerimeterResourceFindNestedObjectInList(
 // PatchCreateEncoder handles creating request data to PATCH parent resource
 // with list including new object.
 func resourceAccessContextManagerServicePerimeterResourcePatchCreateEncoder(d *schema.ResourceData, meta interface{}, obj map[string]interface{}) (map[string]interface{}, error) {
-	currItems, err := resourceAccessContextManagerServicePerimeterResourceListForPatch(d, meta)
+	currItems, etag, err := resourceAccessContextManagerServicePerimeterResourceListForPatch(d, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +399,7 @@ func resourceAccessContextManagerServicePerimeterResourcePatchCreateEncoder(d *s
 	}
 	wrapped := map[string]interface{}{
 		"status": res,
+		"etag": etag,
 	}
 	res = wrapped
 
@@ -408,7 +409,7 @@ func resourceAccessContextManagerServicePerimeterResourcePatchCreateEncoder(d *s
 // PatchDeleteEncoder handles creating request data to PATCH parent resource
 // with list excluding object to delete.
 func resourceAccessContextManagerServicePerimeterResourcePatchDeleteEncoder(d *schema.ResourceData, meta interface{}, obj map[string]interface{}) (map[string]interface{}, error) {
-	currItems, err := resourceAccessContextManagerServicePerimeterResourceListForPatch(d, meta)
+	currItems, etag, err := resourceAccessContextManagerServicePerimeterResourceListForPatch(d, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -428,6 +429,7 @@ func resourceAccessContextManagerServicePerimeterResourcePatchDeleteEncoder(d *s
 	}
 	wrapped := map[string]interface{}{
 		"status": res,
+		"etag": etag,
 	}
 	res = wrapped
 
@@ -436,16 +438,16 @@ func resourceAccessContextManagerServicePerimeterResourcePatchDeleteEncoder(d *s
 
 // ListForPatch handles making API request to get parent resource and
 // extracting list of objects.
-func resourceAccessContextManagerServicePerimeterResourceListForPatch(d *schema.ResourceData, meta interface{}) ([]interface{}, error) {
+func resourceAccessContextManagerServicePerimeterResourceListForPatch(d *schema.ResourceData, meta interface{}) ([]interface{}, string, error) {
 	config := meta.(*transport_tpg.Config)
 	url, err := tpgresource.ReplaceVars(d, config, "{{AccessContextManagerBasePath}}{{perimeter_name}}")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	userAgent, err := tpgresource.GenerateUserAgentString(d, config.UserAgent)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	res, err := transport_tpg.SendRequest(transport_tpg.SendRequestOptions{
@@ -455,24 +457,31 @@ func resourceAccessContextManagerServicePerimeterResourceListForPatch(d *schema.
 		UserAgent: userAgent,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+
+	var etag string
+	var ok bool
+
+	etag, ok = res["etag"].(string)
+	if !ok {
+		return nil, "", fmt.Errorf(`Unable to extract etag from service perimeter`)
 	}
 
 	var v interface{}
-	var ok bool
 	if v, ok = res["status"]; ok && v != nil {
 		res = v.(map[string]interface{})
 	} else {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	v, ok = res["resources"]
 	if ok && v != nil {
 		ls, lsOk := v.([]interface{})
 		if !lsOk {
-			return nil, fmt.Errorf(`expected list for nested field "resources"`)
+			return nil, "", fmt.Errorf(`expected list for nested field "resources"`)
 		}
-		return ls, nil
+		return ls, etag, nil
 	}
-	return nil, nil
+	return nil, etag, nil
 }
